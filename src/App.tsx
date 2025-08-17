@@ -1,6 +1,6 @@
 import { Button } from "@/ui/button";
 import { useAuth0 } from "@auth0/auth0-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/ui/card";
 import {
   Dropzone,
@@ -11,97 +11,147 @@ import { FaPlus, FaTrash } from "react-icons/fa";
 import Navbar from "@/components/Navbar";
 import { SelectCard } from "@/components/SelectCard";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Toaster } from "@/components/ui/sonner";
 
 import "react-h5-audio-player/lib/styles.css";
 import { AlertCircleIcon } from "lucide-react";
 import { Alert, AlertTitle, AlertDescription } from "@/ui/alert";
+import type { Sound } from "./types";
+import type { APISetting, APISound, APIUploadResponse } from "./types/api";
+import { toast } from "sonner";
 
 const MAX_SOUNDS = 5;
 const MAX_FILE_UPLOAD_SIZE = 10 * 1024 * 1024; // 10 MB
 
 export default function App() {
-  const stubSounds = [
-    { id: "1", name: "wo cao", url: "", active: true },
-    { id: "2", name: "bruh", url: "", active: false },
-  ];
+  const { user, isAuthenticated, getAccessTokenSilently, getAccessTokenWithPopup } = useAuth0();
+  const [token, setToken] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  const stubOtherUsers = [
-    {
-      id: "456",
-      username: "OtherUser",
-      sounds: [{ id: "3", name: "meow", url: "", active: true }],
-    },
-  ];
+  const [sounds, setSounds] = useState<Sound[]>([]);
+  const [settings, setSettings] = useState<APISetting | null>(null)
 
-  const { user, isAuthenticated } = useAuth0();
-  const [mySounds, setMySounds] = useState(stubSounds);
-  const [otherUsers] = useState(stubOtherUsers);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [mode, setMode] = useState<"single" | "random">(
-    mySounds.length > 1 ? "single" : "single"
-  );
 
   const [uploadVisible, setUploadVisible] = useState(false);
+  const [files, _] = useState<File[] | undefined>();
 
-  const [files, setFiles] = useState<File[] | undefined>();
+
+  // API FUNCTIONS
+  const fetchToken = async () => {
+    let token;
+    try {
+      token = await getAccessTokenSilently({
+        authorizationParams: {
+          audience: import.meta.env.VITE_AUDIENCE_URL,
+        },
+      });
+    } catch (e: any) {
+      if (e.error === "consent_required" || e.error === "login_required") {
+        token = await getAccessTokenWithPopup({
+          authorizationParams: {
+            audience: import.meta.env.VITE_AUDIENCE_URL,
+          },
+        });
+      } else {
+        throw e;
+      }
+    }
+    return token;
+  };
+
+  function fetchSounds(): Promise<APISound[]> {
+    return new Promise((resolve, reject) => {
+      if (!user) reject()
+      fetch(`${import.meta.env.VITE_API_URL}/sounds/${import.meta.env.VITE_MOC_GUILD_ID}/${user?.sub?.split('|')[2]}`).then((r) => r.ok ? r.json() : Promise.reject(r)).then(o => resolve(o.sounds)).catch(e => reject(e))
+    })
+  }
+
+  function fetchSettings(): Promise<APISetting> {
+    return new Promise((resolve, reject) => {
+      if (!user) reject()
+      fetch(`${import.meta.env.VITE_API_URL}/settings/${import.meta.env.VITE_MOC_GUILD_ID}/${user?.sub?.split('|')[2]}`).then((r) => r.ok ? r.json() : Promise.reject(r)).then(o => resolve(o.setting)).catch(e => reject(e))
+    })
+  }
+
+  // CLIENT HANDLERS
 
   const handleUpload = (files: File[]) => {
     if (!files || files.length === 0) return;
-    setMySounds((prev) => {
-      // we set the newest uploaded file to be the active one
-      const allInactive = prev.map((s) => ({ ...s, active: false }));
-
-      const updated = [
-        ...allInactive,
-        ...files.map((file) => ({
-          id: Math.random().toString(),
-          name: file.name,
-          url: "",
-          active: true,
-        })),
-      ];
-
-      if (updated.length > 1 && mode === "single") setMode("single");
-      if (updated.length === 1) setMode("single");
-
-      return updated;
-    });
-    setSelectedFile(null);
-    setUploadVisible(false);
+    const formData = new FormData();
+    files.forEach(f => formData.append("files", f))
+    fetch(`${import.meta.env.VITE_API_URL}/sounds/${import.meta.env.VITE_MOC_GUILD_ID}/${user?.sub?.split('|')[2]}`, { method: "POST", body: formData, headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()).then((d: APIUploadResponse) => {
+      if (d.status === "failure") {
+        d.failed_files.forEach((f) => toast(f.error))
+        toast(d.message)
+      }
+      setSelectedFile(null);
+      setUploadVisible(false);
+      setSounds((prev) => [...prev, ...d.successful_files.map((s) => ({ id: s.id, name: s.original_name, url: `${import.meta.env.VITE_API_URL}/sound/${s.id}`, active: s.id === settings?.active_sound_id }))])
+    }).catch((e) => toast(e))
   };
 
   const handleSetActive = (id: string) => {
-    setMySounds(mySounds.map((s) => ({ ...s, active: s.id === id })));
+    fetch(`${import.meta.env.VITE_API_URL}/settings/${import.meta.env.VITE_MOC_GUILD_ID}/${user?.sub?.split('|')[2]}`, { method: "PATCH", body: JSON.stringify({ active_sound_id: id }), headers: { Authorization: `Bearer ${token}` } }).then((r) => {
+      if (r.ok) {
+        toast("Successfully changed active sound")
+        setSounds(sounds.map((s) => ({ ...s, active: s.id === id })));
+        setSettings((prev) => ({ ...prev, active_sound_id: id } as APISetting))
+      } else { Promise.reject(r) }
+    }).catch(() => toast("Failed to change active sound"))
   };
 
   const handleDelete = (id: string) => {
-    setMySounds((prev) => {
-      const removeFile = prev.find((s) => s.id === id);
-      const updated = prev.filter((s) => s.id !== id);
-
-      if (removeFile?.active && updated.length > 0) {
-        updated[0].active = true; // if deleted sound was active, set first to active instead
+    fetch(`${import.meta.env.VITE_API_URL}/sound/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }).then((r) => {
+      if (r.ok) {
+        toast("Successfully deleted sound")
+        Promise.all([
+          fetchSounds(),
+          fetchSettings()
+        ]).then(([sounds, settings]) => {
+          setSounds(sounds.map((s) => ({ id: s.id, name: s.original_name, url: `${import.meta.env.VITE_API_URL}/sound/${s.id}`, active: s.id === settings.active_sound_id })))
+          setSettings(settings)
+        })
       }
-
-      if (updated.length <= 1) setMode("single");
-      return updated;
-    });
+      else {
+        Promise.reject(r)
+      }
+    }).catch((e) => toast(e))
   };
 
   const handleModeChange = (newMode: "single" | "random") => {
-    setMode(newMode);
-    if (newMode === "random") {
-      setMySounds(mySounds.map((s) => ({ ...s, active: false })));
-    } else {
-      if (!mySounds.some((s) => s.active) && mySounds.length > 0) {
-        setMySounds(mySounds.map((s, i) => ({ ...s, active: i === 0 })));
-      }
-    }
+    fetch(`${import.meta.env.VITE_API_URL}/settings/${import.meta.env.VITE_MOC_GUILD_ID}/${user?.sub?.split('|')[2]}`, { method: "PATCH", body: JSON.stringify({ mode: newMode }), headers: { Authorization: `Bearer ${token}` } }).then((r) => r.ok ? toast(`Changed mode to ${newMode}`) : Promise.reject(r.json())).catch((e) => toast(e.error));
+    setSettings((prev) => ({ ...prev, mode: newMode } as APISetting));
   };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return
+    }
+    const timeout = setTimeout(() => toast("Could not fetch join sounds"), 10000)
+    fetchToken().then((t) => { setToken(t as string) })
+    Promise.all([
+      fetchSounds(),
+      fetchSettings()
+    ]).then(([sounds, settings]) => {
+      clearTimeout(timeout)
+      setSounds(sounds.map((s) => ({ id: s.id, name: s.original_name, url: `${import.meta.env.VITE_API_URL}/sound/${s.id}`, active: s.id === settings.active_sound_id })))
+      setSettings(settings)
+      setIsLoading(false)
+    })
+  }, [user])
+
+  useEffect(() => {
+    if (sounds.length === 1 && !settings?.active_sound_id) {
+      handleSetActive(sounds[0].id)
+    }
+  }, [sounds])
 
   return (
     <>
       <Navbar />
+      <Toaster />
       <div className="mt-16 p-5 max-w-4xl mx-auto w-full font-serif">
         {isAuthenticated && (
           <>
@@ -118,7 +168,7 @@ export default function App() {
                   <SelectCard
                     title="Single"
                     description="Select a single join sound to play upon entering a voice call."
-                    isActive={mode === "single" || mySounds.length <= 1}
+                    isActive={settings?.mode === "single" || sounds.length <= 1}
                     onSelect={() => {
                       handleModeChange("single");
                     }}
@@ -127,8 +177,8 @@ export default function App() {
                   <SelectCard
                     title="Random"
                     description="Randomly selects one of the join sounds to play upon entering a voice call. Only available with multiple sounds."
-                    disabled={mySounds.length <= 1}
-                    isActive={mode === "random" && mySounds.length > 1}
+                    disabled={sounds.length <= 1}
+                    isActive={settings?.mode === "random" && sounds.length > 1}
                     onSelect={() => {
                       handleModeChange("random");
                     }}
@@ -138,65 +188,104 @@ export default function App() {
               </CardHeader>
               <CardContent>
                 <div
-                  className="mb-4 transition-all duration-700 [transition-timing-function:cubic-bezier(0.25, 0.8, 0.25, 1)] overflow-hidden"
+                  className="transition-all duration-500 overflow-hidden mb-4"
                   style={{
-                    maxHeight:
-                      mySounds.length === 0
-                        ? "80px"
-                        : `${Math.min(mySounds.length * 60 + 20, 400)}px`,
-                    opacity: 1,
+                    maxHeight: sounds.length >= MAX_SOUNDS ? "120px" : "0px",
+                    opacity: sounds.length >= MAX_SOUNDS ? 1 : 0,
+                    marginBottom:
+                      sounds.length >= MAX_SOUNDS ? "16px" : "0px",
                   }}
                 >
-                  {mySounds.length === 0 ? (
-                    <div className="text-gray-300 py-4">
-                      No join sounds uploaded yet.
-                    </div>
-                  ) : (
-                    <ul className="space-y-3">
-                      {mySounds.map((sound) => (
-                        <li
-                          key={sound.id}
-                          className="flex flex-row items-stretch sm:items-center gap-2 sm:gap-4 w-full justify-between transition-all duration-500 ease-in-out"
-                        >
-                          <span
-                            className={`${
-                              sound.active && mode === "single"
-                                ? "font-bold"
-                                : "text-gray-500"
-                            } ${
-                              mode === "single"
-                                ? "hover:text-primary transition duration-150 ease-in-out cursor-pointer"
-                                : "text-white font-bold"
-                            }`}
-                            onClick={() => handleSetActive(sound.id)}
-                          >
-                            {sound.name}
-                            {sound.active && mode === "single" && (
-                              <span className="ml-2 text-primary font-sans">
-                                (Active)
-                              </span>
-                            )}
-                          </span>
-                          <ConfirmDialog
-                            dialogTrigger={
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="hover:text-primary"
-                              >
-                                <FaTrash />
-                              </Button>
-                            }
-                            onConfirm={() => handleDelete(sound.id)}
-                            toDelete={sound.name}
-                          />
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  <Alert variant="default">
+                    <AlertCircleIcon />
+                    <AlertTitle>Heads up!</AlertTitle>
+                    <AlertDescription>
+                      You can only add up to {MAX_SOUNDS} join sounds. Remove
+                      any existing sounds to upload new ones.
+                    </AlertDescription>
+                  </Alert>
                 </div>
+                <div
+                  className="transition-all duration-500 overflow-hidden mb-4"
+                  style={{
+                    maxHeight: !isLoading && sounds.length > 0 && settings?.mode === "single" && !settings?.active_sound_id ? "120px" : "0px",
+                    opacity: !isLoading && sounds.length > 0 && settings?.mode === "single" && !settings?.active_sound_id ? 1 : 0,
+                    marginBottom:
+                      !isLoading && sounds.length > 0 && settings?.mode === "single" && !settings?.active_sound_id ? "16px" : "0px",
+                  }}
+                >
+                  <Alert variant="default">
+                    <AlertCircleIcon />
+                    <AlertTitle>Heads up!</AlertTitle>
+                    <AlertDescription>
+                      You currently do not have an active sound. Click on a sound to activate it!
+                    </AlertDescription>
+                  </Alert>
+                </div>
+                {isLoading ? <div className="space-y-4">
+                  <Skeleton className="h-6 w-[80%] rounded-full" />
+                  <Skeleton className="h-6 w-[80%] rounded-full" />
+                  <Skeleton className="h-6 w-[80%] rounded-full" />
+                </div> : (
+                  <div
+                      className="mb-4 transition-all duration-700 [transition-timing-function:cubic-bezier(0.25, 0.8, 0.25, 1)] overflow-hidden"
+                      style={{
+                        maxHeight:
+                          sounds.length === 0
+                            ? "80px"
+                            : `${Math.min(sounds.length * 60 + 20, 400)}px`,
+                        opacity: 1,
+                      }}
+                    >
+                      {sounds.length === 0 ? (
+                        <div className="text-gray-300 py-4">
+                          No join sounds uploaded yet.
+                        </div>
+                      ) : (
+                        <ul className="space-y-3">
+                            {sounds.map((sound) => (
+                              <li
+                                key={sound.id}
+                                className="flex flex-row items-stretch sm:items-center gap-2 sm:gap-4 w-full justify-between transition-all duration-500 ease-in-out"
+                              >
+                                <span
+                                  className={`${sound.active && settings?.mode === "single"
+                                    ? "font-bold"
+                                    : "text-gray-500"
+                                    } ${settings?.mode === "single"
+                                      ? "hover:text-primary transition duration-150 ease-in-out cursor-pointer"
+                                      : "text-white font-bold"
+                                    }`}
+                                  onClick={() => handleSetActive(sound.id)}
+                                >
+                                  {sound.name}
+                                  {sound.active && settings?.mode === "single" && (
+                                    <span className="ml-2 text-primary font-sans">
+                                      (Active)
+                                    </span>
+                                  )}
+                                </span>
+                                <ConfirmDialog
+                                  dialogTrigger={
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="hover:text-primary"
+                                    >
+                                      <FaTrash />
+                                    </Button>
+                                  }
+                                  onConfirm={() => handleDelete(sound.id)}
+                                  toDelete={sound.name}
+                                />
+                              </li>
+                            ))}
+                        </ul>
+                      )}
+                    </div>
+                )}
 
-                {!uploadVisible && mySounds.length < MAX_SOUNDS && (
+                {!isLoading && !uploadVisible && sounds.length < MAX_SOUNDS && (
                   <div className="flex justify-center transition-all duration-500 ease-in-out">
                     <Button
                       variant="outline"
@@ -209,25 +298,6 @@ export default function App() {
                 )}
 
                 <div
-                  className="transition-all duration-500 overflow-hidden mb-4"
-                  style={{
-                    maxHeight: mySounds.length >= MAX_SOUNDS ? "120px" : "0px",
-                    opacity: mySounds.length >= MAX_SOUNDS ? 1 : 0,
-                    marginBottom:
-                      mySounds.length >= MAX_SOUNDS ? "16px" : "0px",
-                  }}
-                >
-                  <Alert variant="default">
-                    <AlertCircleIcon />
-                    <AlertTitle>Heads up!</AlertTitle>
-                    <AlertDescription>
-                      You can only add up to {MAX_SOUNDS} join sounds. Remove
-                      any existing sounds to upload new ones.
-                    </AlertDescription>
-                  </Alert>
-                </div>
-
-                <div
                   className={`transition-all duration-700 [transition-timing-function:cubic-bezier(0.25, 0.8, 0.25, 1)] overflow-hidden ${
                     uploadVisible ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
                   }`}
@@ -235,10 +305,10 @@ export default function App() {
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full">
                     <Dropzone
                       accept={{ "audio/*": [] }}
-                      maxFiles={1}
+                      maxFiles={MAX_SOUNDS}
                       maxSize={MAX_FILE_UPLOAD_SIZE}
                       onDrop={handleUpload}
-                      onError={console.error}
+                      onError={(err) => toast(err.message)}
                       src={files}
                     >
                       <DropzoneEmptyState /> <DropzoneContent />
@@ -250,42 +320,6 @@ export default function App() {
                     </div>
                   )}
                 </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Browse Join Sounds</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {otherUsers.length === 0 ? (
-                  <div>No other users found.</div>
-                ) : (
-                  <ul className="space-y-6">
-                    {otherUsers.map((u) => (
-                      <li key={u.id}>
-                        <div className="font-bold mb-2">{u.username}</div>
-                        <ul className="space-y-2 ml-2 sm:ml-4">
-                          {u.sounds.map((sound) => (
-                            <li
-                              key={sound.id}
-                              className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3"
-                            >
-                              <span>{sound.name}</span>
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                className="w-full sm:w-auto"
-                              >
-                                Play
-                              </Button>
-                            </li>
-                          ))}
-                        </ul>
-                      </li>
-                    ))}
-                  </ul>
-                )}
               </CardContent>
             </Card>
           </>

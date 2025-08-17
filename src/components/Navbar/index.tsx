@@ -29,7 +29,11 @@ export default function Navbar() {
             <Button
               variant="default"
               className="rounded-full hover:cursor-pointer"
-              onClick={() => loginWithRedirect()}
+                onClick={() => loginWithRedirect({
+                  authorizationParams: {
+                    connection: 'discord'
+                  }
+                })}
             >
               Sign In
             </Button>
