@@ -83,29 +83,29 @@ export default function App() {
     files.forEach(f => formData.append("files", f))
     fetch(`${import.meta.env.VITE_API_URL}/sounds/${import.meta.env.VITE_MOC_GUILD_ID}/${user?.sub?.split('|')[2]}`, { method: "POST", body: formData, headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()).then((d: APIUploadResponse) => {
       if (d.status === "failure") {
-        d.failed_files.forEach((f) => toast(f.error))
-        toast(d.message)
+        d.failed_files.forEach((f) => toast.warning(`Failed to upload ${f.filename}`, { description: f.error }))
+        toast.info(d.message)
       }
       setSelectedFile(null);
       setUploadVisible(false);
       setSounds((prev) => [...prev, ...d.successful_files.map((s) => ({ id: s.id, name: s.original_name, url: `${import.meta.env.VITE_API_URL}/sound/${s.id}`, active: s.id === settings?.active_sound_id }))])
-    }).catch((e) => toast(e))
+    }).catch((e) => toast.error(e))
   };
 
   const handleSetActive = (id: string) => {
     fetch(`${import.meta.env.VITE_API_URL}/settings/${import.meta.env.VITE_MOC_GUILD_ID}/${user?.sub?.split('|')[2]}`, { method: "PATCH", body: JSON.stringify({ active_sound_id: id }), headers: { Authorization: `Bearer ${token}` } }).then((r) => {
       if (r.ok) {
-        toast("Successfully changed active sound")
+        toast.success("Successfully changed active sound", { description: `The active sound is now ${sounds.find(s => s.id === id)?.name}` })
         setSounds(sounds.map((s) => ({ ...s, active: s.id === id })));
         setSettings((prev) => ({ ...prev, active_sound_id: id } as APISetting))
-      } else { Promise.reject(r) }
-    }).catch(() => toast("Failed to change active sound"))
+      } else { Promise.reject(r.json()) }
+    }).catch((e) => toast.error("Failed to change active sound", { description: e.error }))
   };
 
   const handleDelete = (id: string) => {
     fetch(`${import.meta.env.VITE_API_URL}/sound/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }).then((r) => {
       if (r.ok) {
-        toast("Successfully deleted sound")
+        toast.success("Successfully deleted sound", { description: `${sounds.find(s => s.id === id)?.name} no longer exists` })
         Promise.all([
           fetchSounds(),
           fetchSettings()
@@ -115,21 +115,21 @@ export default function App() {
         })
       }
       else {
-        Promise.reject(r)
+        Promise.reject(r.json())
       }
-    }).catch((e) => toast(e))
+    }).catch((e) => toast.error(e.error))
   };
 
   const handleModeChange = (newMode: "single" | "random") => {
-    fetch(`${import.meta.env.VITE_API_URL}/settings/${import.meta.env.VITE_MOC_GUILD_ID}/${user?.sub?.split('|')[2]}`, { method: "PATCH", body: JSON.stringify({ mode: newMode }), headers: { Authorization: `Bearer ${token}` } }).then((r) => r.ok ? toast(`Changed mode to ${newMode}`) : Promise.reject(r.json())).catch((e) => toast(e.error));
+    fetch(`${import.meta.env.VITE_API_URL}/settings/${import.meta.env.VITE_MOC_GUILD_ID}/${user?.sub?.split('|')[2]}`, { method: "PATCH", body: JSON.stringify({ mode: newMode }), headers: { Authorization: `Bearer ${token}` } }).then((r) => r.ok ? toast.success(`Changed mode to ${newMode}`) : Promise.reject(r.json())).catch((e) => toast.error(e.error));
     setSettings((prev) => ({ ...prev, mode: newMode } as APISetting));
   };
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !user) {
       return
     }
-    const timeout = setTimeout(() => toast("Could not fetch join sounds"), 10000)
+    const timeout = setTimeout(() => toast.warning("Could not fetch join sounds"), 10000)
     fetchToken().then((t) => { setToken(t as string) })
     Promise.all([
       fetchSounds(),
@@ -308,7 +308,7 @@ export default function App() {
                       maxFiles={MAX_SOUNDS}
                       maxSize={MAX_FILE_UPLOAD_SIZE}
                       onDrop={handleUpload}
-                      onError={(err) => toast(err.message)}
+                      onError={(err) => toast.error(err.message)}
                       src={files}
                     >
                       <DropzoneEmptyState /> <DropzoneContent />
