@@ -25,15 +25,9 @@
 
     "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "./src/*"
-      ],
-      "@/public/*": [
-        "./public/*"
-      ],
-      "@/ui/*": [
-        "./src/components/ui/*"
-      ]
+      "@/*": ["./src/*"],
+      "@/public/*": ["./public/*"],
+      "@/ui/*": ["./src/components/ui/*"]
     }
   },
   "include": ["src"]
