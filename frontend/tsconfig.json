@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "module": "es2022",
+    "baseUrl": ".",
+    "jsx": "react",
+    "moduleResolution": "Node",
+    "paths": {
+      "@/*": ["src/*"],
+      "@/ui/*": ["src/components/ui/*"]
+    },
+    "strict": true,
+    "target": "ES2015"
+  },
+  "include": ["src/**/*"]
+}
