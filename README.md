@@ -6,6 +6,8 @@ This is a website used to interface Discord users with MOCBOT v2's join sound fe
 
 ### Required Environment Variables
 
+Create a `.env` inside the `frontend` folder and populate it with the following values:
+
 - `VITE_AUTH0_DOMAIN` - The auth0 application domain
 - `VITE_AUTH0_CLIENT_ID` - The auth0 application client ID
 - `VITE_AUTH0_CALLBACK_URL` - The callback URL to be used by auth0

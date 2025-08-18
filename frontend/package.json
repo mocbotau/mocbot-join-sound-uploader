@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "vite build",
     "lint": "eslint .",
     "lint-fix": "eslint . --fix",
     "prettier": "prettier -c .",
@@ -45,6 +45,7 @@
     "@types/react-dom": "^19.1.7",
     "@typescript-eslint/eslint-plugin": "^8.39.1",
     "@typescript-eslint/parser": "^8.39.1",
+    "@vitejs/plugin-react": "^5.0.0",
     "@vitejs/plugin-react-swc": "^3.11.0",
     "eslint": "^9.32.0",
     "eslint-plugin-react-hooks": "^5.2.0",

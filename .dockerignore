@@ -1,0 +1,16 @@
+.gitignore
+.github
+.git
+
+Dockerfile
+.dockerignore
+docker-compose.yaml
+
+*.md
+infra/
+
+node_modules/
+
+eslint.config.mjs
+.prettierc.json
+.nvmrc

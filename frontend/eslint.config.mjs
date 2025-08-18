@@ -1,4 +1,4 @@
-import { defineConfig } from "eslint/config";
+import { defineConfig, globalIgnores } from "eslint/config";
 import typescriptEslint from "@typescript-eslint/eslint-plugin";
 import globals from "globals";
 import tsParser from "@typescript-eslint/parser";
@@ -46,4 +46,5 @@ export default defineConfig([
       eqeqeq: "error",
     },
   },
+  globalIgnores(["./dist/*", "./node_modules/*"]),
 ]);
