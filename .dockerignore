@@ -14,3 +14,7 @@ node_modules/
 eslint.config.mjs
 .prettierc.json
 .nvmrc
+
+dagger.json
+.dagger
+helmfile.yaml.gotmpl

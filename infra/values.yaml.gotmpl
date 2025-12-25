@@ -1,16 +1,17 @@
 # yaml-language-server: $schema=../../infra-helm-charts/charts/generic-app/values.schema.json
 
 environment: "prod"
-version: "${COMMIT_SHA}"
+version: {{ requiredEnv "COMMIT_SHA" | quote }}
 
 deployments:
   - name: "join-sound-website"
-    image: "${DOCKERHUB_USERNAME}/${DOCKERHUB_REPO}:${REPO_NAME}-prod"
+    image: "mocbotau/cloud:mocbot-join-sound-uploader-prod"
     service:
       port: 8080
       targetPort: 8080
     ingress:
       subdomain: "join-sound"
+      domain: "masterofcubesau.com"
     readinessProbe:
       httpGet:
         path: "/"
