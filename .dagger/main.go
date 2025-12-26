@@ -11,9 +11,6 @@ const (
 )
 
 type MocbotJoinSoundUploader struct {
-	// Repository name
-	// +private
-	RepoName string
 	// Source code directory
 	// +private
 	Source *dagger.Directory
@@ -22,7 +19,6 @@ type MocbotJoinSoundUploader struct {
 }
 
 func New(
-	repoName string,
 	// Source code directory
 	// +defaultPath="."
 	source *dagger.Directory,
@@ -30,7 +26,6 @@ func New(
 	infisicalClientSecret *dagger.Secret,
 ) *MocbotJoinSoundUploader {
 	return &MocbotJoinSoundUploader{
-		RepoName:              repoName,
 		Source:                source,
 		InfisicalClientSecret: infisicalClientSecret,
 	}
@@ -54,8 +49,9 @@ func (m *MocbotJoinSoundUploader) BuildAndPush(
 	ctx context.Context,
 	// +default="prod"
 	env string,
+	repoName string,
 ) (string, error) {
-	return dag.Docker(m.Source, m.InfisicalClientSecret, m.RepoName, dagger.DockerOpts{
+	return dag.Docker(m.Source, m.InfisicalClientSecret, repoName, dagger.DockerOpts{
 		Environment: env,
 	}).Build().Publish(ctx)
 }
